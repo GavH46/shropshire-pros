@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Matchups — League Dashboard</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+
+  <div class="ticker-wrap">
+    <div class="ticker" id="ticker">
+      <span>LOADING MATCHUPS…</span>
+    </div>
+  </div>
+
+  <div class="header">
+    <img class="logo" src="assets/spfl-logo.png" alt="League logo" />
+    <div class="header-text">
+      <div class="subtitle" id="week-label">LOADING…</div>
+      <h1 id="league-title" class="display">YOUR LEAGUE</h1>
+    </div>
+  </div>
+
+  <nav class="tabs">
+    <a href="index.html">STANDINGS</a>
+    <a href="matchups.html" class="active">MATCHUPS</a>
+    <a href="transactions.html">WAIVERS &amp; TRADES</a>
+    <a href="draft.html">DRAFT</a>
+  </nav>
+
+  <div class="section-title" id="week-heading">WEEK —</div>
+  <div id="status" class="status">Fetching this week's matchups…</div>
+  <div class="matchup-grid" id="matchup-grid"></div>
+
+  <div class="footer-note">DATA VIA SLEEPER PUBLIC API · REFRESHES ON PAGE LOAD</div>
+
+<script src="assets/common.js"></script>
+<script>
+  async function loadMatchups() {
+    try {
+      const league = await getLeague();
+      setHeader(league);
+
+      const { rosterMap } = await getRostersAndUsers();
+      const week = await getCurrentWeek();
+      document.getElementById("week-heading").textContent = `WEEK ${week}`;
+
+      const matchups = await fetch(`${API}/league/${LEAGUE_ID}/matchups/${week}`).then(r => r.json());
+
+      if (!matchups || matchups.length === 0) {
+        document.getElementById("status").textContent =
+          "No matchup data yet for this week — check back once games are set.";
+        return;
+      }
+
+      // Group by matchup_id
+      const groups = {};
+      matchups.forEach(m => {
+        if (!groups[m.matchup_id]) groups[m.matchup_id] = [];
+        groups[m.matchup_id].push(m);
+      });
+
+      const grid = document.getElementById("matchup-grid");
+      grid.innerHTML = "";
+
+      Object.values(groups).forEach(pair => {
+        const [a, b] = pair;
+        if (!a || !b) return; // bye week / incomplete pairing
+
+        const teamA = rosterMap[a.roster_id] || { teamName: "Unknown", owner: "" };
+        const teamB = rosterMap[b.roster_id] || { teamName: "Unknown", owner: "" };
+        const aWin = a.points > b.points;
+        const bWin = b.points > a.points;
+
+        const card = document.createElement("div");
+        card.className = "matchup-card";
+        card.innerHTML = `
+          <div class="matchup-row ${aWin ? "winner" : ""}">
+            <div class="matchup-team">
+              <span class="team-name">${teamA.teamName}</span>
+              <span class="owner">${teamA.owner}</span>
+            </div>
+            <span class="matchup-score mono">${(a.points || 0).toFixed(2)}</span>
+          </div>
+          <div class="matchup-row ${bWin ? "winner" : ""}">
+            <div class="matchup-team">
+              <span class="team-name">${teamB.teamName}</span>
+              <span class="owner">${teamB.owner}</span>
+            </div>
+            <span class="matchup-score mono">${(b.points || 0).toFixed(2)}</span>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+
+      const tickerEl = document.getElementById("ticker");
+      const items = [
+        `WEEK ${week} MATCHUPS`,
+        `${Object.keys(groups).length} GAMES THIS WEEK`,
+        `${league.name ? league.name.toUpperCase() : "LEAGUE"} · SEASON ${league.season}`,
+      ];
+      tickerEl.innerHTML = [...items, ...items].map(t => `<span>● ${t}</span>`).join("");
+
+      document.getElementById("status").style.display = "none";
+    } catch (err) {
+      document.getElementById("status").textContent =
+        "Couldn't load matchup data. Check that the league ID is correct and try again.";
+      console.error(err);
+    }
+  }
+
+  loadMatchups();
+</script>
+</body>
+</html>

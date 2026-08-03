@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Draft — League Dashboard</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+
+  <div class="ticker-wrap">
+    <div class="ticker" id="ticker">
+      <span>LOADING DRAFT…</span>
+    </div>
+  </div>
+
+  <div class="header">
+    <img class="logo" src="assets/spfl-logo.png" alt="League logo" />
+    <div class="header-text">
+      <div class="subtitle" id="week-label">LOADING…</div>
+      <h1 id="league-title" class="display">YOUR LEAGUE</h1>
+    </div>
+  </div>
+
+  <nav class="tabs">
+    <a href="index.html">STANDINGS</a>
+    <a href="matchups.html">MATCHUPS</a>
+    <a href="transactions.html">WAIVERS &amp; TRADES</a>
+    <a href="draft.html" class="active">DRAFT</a>
+  </nav>
+
+  <div class="section-title" id="draft-heading">DRAFT RESULTS</div>
+  <div id="status" class="status">Fetching draft info…</div>
+  <div class="draft-board" id="draft-board"></div>
+
+  <div class="footer-note">DATA VIA SLEEPER PUBLIC API · PLAYER NAMES CACHED LOCALLY FOR 24H</div>
+
+<script src="assets/common.js"></script>
+<script>
+  async function loadDraft() {
+    try {
+      const league = await getLeague();
+      setHeader(league);
+
+      const { rosterMap, users } = await getRostersAndUsers();
+
+      document.getElementById("status").textContent =
+        "Fetching draft board and player names (first load can take a few seconds)…";
+
+      const drafts = await fetch(`${API}/league/${LEAGUE_ID}/drafts`).then(r => r.json());
+      if (!drafts || drafts.length === 0) {
+        document.getElementById("status").textContent = "No draft found for this league yet.";
+        return;
+      }
+
+      const draft = drafts[0];
+      const [picks, playerMap] = await Promise.all([
+        fetch(`${API}/draft/${draft.draft_id}/picks`).then(r => r.json()),
+        getPlayerMap(),
+      ]);
+
+      // Map user_id -> team name (picks reference picked_by / roster_id)
+      const userNameMap = {};
+      users.forEach(u => {
+        userNameMap[u.user_id] = (u.metadata && u.metadata.team_name) || u.display_name;
+      });
+
+      document.getElementById("draft-heading").textContent =
+        `DRAFT RESULTS · ${draft.season} · ${draft.type ? draft.type.toUpperCase() : ""}`;
+
+      picks.sort((a, b) => (a.pick_no || 0) - (b.pick_no || 0));
+
+      const board = document.getElementById("draft-board");
+      board.innerHTML = "";
+
+      picks.forEach(p => {
+        const playerName = playerMap[p.player_id] || `${p.metadata?.first_name || ""} ${p.metadata?.last_name || ""}`.trim() || "Unknown";
+        const teamName = (rosterMap[p.roster_id] || {}).teamName || userNameMap[p.picked_by] || "Unknown";
+        const pos = p.metadata?.position || "";
+
+        const card = document.createElement("div");
+        card.className = "pick-card";
+        card.innerHTML = `
+          <div class="pick-num">${p.pick_no}</div>
+          <div class="pick-player">${playerName}${pos ? ` <span class="owner">(${pos})</span>` : ""}</div>
+          <div class="pick-meta">${teamName}</div>
+          <div class="pick-meta">RD ${p.round} · PICK ${p.draft_slot || ""}</div>
+        `;
+        board.appendChild(card);
+      });
+
+      const tickerEl = document.getElementById("ticker");
+      const items = [
+        `${picks.length} TOTAL PICKS`,
+        `DRAFT TYPE: ${draft.type ? draft.type.toUpperCase() : "SNAKE"}`,
+        `${league.name ? league.name.toUpperCase() : "LEAGUE"} · SEASON ${draft.season}`,
+      ];
+      tickerEl.innerHTML = [...items, ...items].map(t => `<span>● ${t}</span>`).join("");
+
+      document.getElementById("status").style.display = "none";
+    } catch (err) {
+      document.getElementById("status").textContent =
+        "Couldn't load draft data. Check that the league ID is correct and try again.";
+      console.error(err);
+    }
+  }
+
+  loadDraft();
+</script>
+</body>
+</html>

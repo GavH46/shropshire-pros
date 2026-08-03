@@ -3,161 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>League Dashboard</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Teko:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
-
-  :root {
-    --bg-dark: #06170F;
-    --bg-mid: #0B2818;
-    --field-a: #0d3320;
-    --field-b: #0f3d26;
-    --panel: #0F2E1D;
-    --border: #2b3d33;
-    --gold: #D4A72C;
-    --chalk: #F5F1E6;
-    --win: #34d399;
-    --loss: #fb7185;
-    --muted: #8a9a90;
-  }
-  * { box-sizing: border-box; }
-  html, body { height: 100%; }
-  body {
-    margin: 0;
-    color: var(--chalk);
-    font-family: 'IBM Plex Sans', system-ui, sans-serif;
-    min-height: 100vh;
-    position: relative;
-    isolation: isolate;
-
-    /* Football field: mow stripes + yard lines */
-    background-color: var(--bg-mid);
-    background-image:
-      /* yard lines, every 100px */
-      repeating-linear-gradient(180deg,
-        rgba(255,255,255,0.30) 0px, rgba(255,255,255,0.30) 2px,
-        transparent 2px, transparent 100px),
-      /* alternating mow stripes */
-      repeating-linear-gradient(180deg,
-        rgba(255,255,255,0.035) 0px, rgba(255,255,255,0.035) 100px,
-        transparent 100px, transparent 200px),
-      /* base vignette */
-      radial-gradient(ellipse at 50% 0%, var(--bg-mid) 0%, var(--bg-dark) 75%);
-  }
-
-  /* hash marks — two narrow columns running down the page */
-  body::before, body::after {
-    content: "";
-    position: fixed;
-    top: 0; bottom: 0;
-    width: 14px;
-    pointer-events: none;
-    z-index: -1;
-    background-image: repeating-linear-gradient(180deg,
-      rgba(255,255,255,0.28) 0px, rgba(255,255,255,0.28) 8px,
-      transparent 8px, transparent 100px);
-  }
-  body::before { left: 18%; }
-  body::after { right: 18%; }
-  .mono { font-family: 'IBM Plex Mono', monospace; }
-  .display { font-family: 'Teko', sans-serif; font-weight: 600; }
-
-  .ticker-wrap {
-    overflow: hidden;
-    border-bottom: 2px solid rgba(212,167,44,0.4);
-    background: rgba(0,0,0,0.4);
-  }
-  .ticker {
-    display: flex;
-    white-space: nowrap;
-    padding: 6px 0;
-    animation: scroll 30s linear infinite;
-  }
-  .ticker span {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 11px;
-    letter-spacing: 0.15em;
-    color: var(--gold);
-    padding: 0 2rem;
-  }
-  @keyframes scroll {
-    from { transform: translateX(0); }
-    to { transform: translateX(-50%); }
-  }
-
-  .header {
-    padding: 2rem 1.5rem 1.5rem;
-    border-bottom: 1px solid rgba(212,167,44,0.3);
-    display: flex;
-    align-items: center;
-    gap: 1.25rem;
-    flex-wrap: wrap;
-  }
-  .header img.logo {
-    height: 84px;
-    width: auto;
-    filter: drop-shadow(0 4px 10px rgba(0,0,0,0.5));
-  }
-  .header-text h1 {
-    font-size: 4rem;
-    line-height: 1;
-    margin: 0.2rem 0;
-    letter-spacing: 0.02em;
-  }
-  .header-text h1 span { color: var(--gold); }
-  .subtitle {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 12px;
-    letter-spacing: 0.25em;
-    color: rgba(52,211,153,0.8);
-  }
-
-  .table-wrap {
-    margin: 1.5rem;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    overflow: hidden;
-    background: rgba(6,20,13,0.88);
-    backdrop-filter: blur(2px);
-    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
-  }
-  table { width: 100%; border-collapse: collapse; }
-  thead th {
-    text-align: left;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 10px;
-    letter-spacing: 0.15em;
-    color: var(--muted);
-    background: rgba(0,0,0,0.25);
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--border);
-  }
-  tbody tr { border-bottom: 1px solid rgba(255,255,255,0.05); }
-  tbody tr:nth-child(even) { background: rgba(255,255,255,0.02); }
-  td { padding: 10px 12px; vertical-align: middle; }
-  .rank { font-family: 'Teko', sans-serif; font-size: 1.5rem; }
-  .team-name { font-weight: 600; }
-  .owner { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--muted); }
-  .record, .pct { font-family: 'IBM Plex Mono', monospace; text-align: center; }
-  .pf-bar-wrap {
-    height: 4px; background: #1b2e22; border-radius: 3px; margin-top: 4px; overflow: hidden;
-  }
-  .pf-bar { height: 100%; background: rgba(212,167,44,0.7); }
-  .status {
-    padding: 3rem 1.5rem;
-    text-align: center;
-    font-family: 'IBM Plex Mono', monospace;
-    color: var(--muted);
-    font-size: 13px;
-  }
-  .footer-note {
-    padding: 0 1.5rem 2rem;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 10px;
-    color: #5c6d63;
-    letter-spacing: 0.1em;
-  }
-</style>
+<title>Standings — League Dashboard</title>
+<link rel="stylesheet" href="assets/style.css" />
 </head>
 <body>
 
@@ -168,12 +15,19 @@
   </div>
 
   <div class="header">
-    <img class="logo" src="assets/spfl-logo.png" alt="SPFL logo" />
+    <img class="logo" src="assets/spfl-logo.png" alt="League logo" />
     <div class="header-text">
       <div class="subtitle" id="week-label">LOADING…</div>
       <h1 id="league-title" class="display">YOUR LEAGUE</h1>
     </div>
   </div>
+
+  <nav class="tabs">
+    <a href="index.html" class="active">STANDINGS</a>
+    <a href="matchups.html">MATCHUPS</a>
+    <a href="transactions.html">WAIVERS &amp; TRADES</a>
+    <a href="draft.html">DRAFT</a>
+  </nav>
 
   <div id="status" class="status">Fetching standings from Sleeper…</div>
   <div class="table-wrap" id="table-wrap" style="display:none;">
@@ -194,43 +48,18 @@
 
   <div class="footer-note">DATA VIA SLEEPER PUBLIC API · REFRESHES ON PAGE LOAD</div>
 
+<script src="assets/common.js"></script>
 <script>
-  // ============ CONFIGURE THIS ============
-  const LEAGUE_ID = "1390002454849916928";
-  // =========================================
-
-  const API = "https://api.sleeper.app/v1";
-
-  function pct(w, l, t) {
-    const g = w + l + t;
-    if (g === 0) return ".000";
-    return (w / g).toFixed(3).replace(/^0/, "");
-  }
-
-  async function loadDashboard() {
+  async function loadStandings() {
     try {
-      const [league, rosters, users] = await Promise.all([
-        fetch(`${API}/league/${LEAGUE_ID}`).then(r => r.json()),
-        fetch(`${API}/league/${LEAGUE_ID}/rosters`).then(r => r.json()),
-        fetch(`${API}/league/${LEAGUE_ID}/users`).then(r => r.json()),
-      ]);
+      const league = await getLeague();
+      setHeader(league);
 
-      document.getElementById("league-title").innerHTML =
-        (league.name || "LEAGUE").toUpperCase();
-      document.getElementById("week-label").textContent =
-        `${(league.season_type || "REGULAR").toUpperCase()} SEASON · ${league.season}`;
-
-      const userMap = {};
-      users.forEach(u => {
-        userMap[u.user_id] = {
-          teamName: (u.metadata && u.metadata.team_name) || u.display_name,
-          owner: u.display_name,
-        };
-      });
+      const { rosters, rosterMap } = await getRostersAndUsers();
 
       const standings = rosters.map(r => {
         const s = r.settings || {};
-        const info = userMap[r.owner_id] || { teamName: "Unknown", owner: "Unknown" };
+        const info = rosterMap[r.roster_id];
         return {
           teamName: info.teamName,
           owner: info.owner,
@@ -272,17 +101,14 @@
         tbody.appendChild(tr);
       });
 
-      // Ticker content
       const top = standings[0];
-      const hottest = standings[0];
       const tickerEl = document.getElementById("ticker");
       const items = [
         `${top.teamName.toUpperCase()} LEADS THE LEAGUE AT ${top.wins}-${top.losses}`,
         `HIGHEST SCORING TEAM: ${standings.slice().sort((a,b)=>b.pf-a.pf)[0].teamName.toUpperCase()}`,
         `${standings.length} TEAMS · SEASON ${league.season}`,
       ];
-      tickerEl.innerHTML = [...items, ...items]
-        .map(t => `<span>● ${t}</span>`).join("");
+      tickerEl.innerHTML = [...items, ...items].map(t => `<span>● ${t}</span>`).join("");
 
       document.getElementById("status").style.display = "none";
       document.getElementById("table-wrap").style.display = "block";
@@ -293,7 +119,7 @@
     }
   }
 
-  loadDashboard();
+  loadStandings();
 </script>
 </body>
 </html>

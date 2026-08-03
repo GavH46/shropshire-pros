@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Waivers &amp; Trades — League Dashboard</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+
+  <div class="ticker-wrap">
+    <div class="ticker" id="ticker">
+      <span>LOADING ACTIVITY…</span>
+    </div>
+  </div>
+
+  <div class="header">
+    <img class="logo" src="assets/spfl-logo.png" alt="League logo" />
+    <div class="header-text">
+      <div class="subtitle" id="week-label">LOADING…</div>
+      <h1 id="league-title" class="display">YOUR LEAGUE</h1>
+    </div>
+  </div>
+
+  <nav class="tabs">
+    <a href="index.html">STANDINGS</a>
+    <a href="matchups.html">MATCHUPS</a>
+    <a href="transactions.html" class="active">WAIVERS &amp; TRADES</a>
+    <a href="draft.html">DRAFT</a>
+  </nav>
+
+  <div class="section-title" id="range-heading">RECENT ACTIVITY</div>
+  <div id="status" class="status">Fetching recent waiver &amp; trade activity…</div>
+  <div class="txn-list" id="txn-list"></div>
+
+  <div class="footer-note">DATA VIA SLEEPER PUBLIC API · PLAYER NAMES CACHED LOCALLY FOR 24H</div>
+
+<script src="assets/common.js"></script>
+<script>
+  function txnTypeLabel(t) {
+    if (t === "trade") return "TRADE";
+    if (t === "waiver") return "WAIVER";
+    return "FREE AGENT";
+  }
+
+  async function loadTransactions() {
+    try {
+      const league = await getLeague();
+      setHeader(league);
+
+      const { rosterMap } = await getRostersAndUsers();
+      const currentWeek = await getCurrentWeek();
+
+      document.getElementById("status").textContent =
+        "Fetching recent activity and player names (first load can take a few seconds)…";
+
+      const playerMap = await getPlayerMap();
+
+      // Pull the last several weeks of transactions (Sleeper indexes by week)
+      const weeksToFetch = [];
+      for (let w = currentWeek; w >= Math.max(1, currentWeek - 4); w--) weeksToFetch.push(w);
+
+      const results = await Promise.all(
+        weeksToFetch.map(w =>
+          fetch(`${API}/league/${LEAGUE_ID}/transactions/${w}`).then(r => r.json()).catch(() => [])
+        )
+      );
+
+      let txns = results.flat().filter(Boolean);
+      txns.sort((a, b) => (b.created || 0) - (a.created || 0));
+      txns = txns.slice(0, 30); // keep the feed readable
+
+      const list = document.getElementById("txn-list");
+      list.innerHTML = "";
+
+      if (txns.length === 0) {
+        document.getElementById("status").textContent =
+          "No waiver or trade activity found in the recent weeks.";
+        return;
+      }
+
+      txns.forEach(t => {
+        const rosterIds = t.roster_ids || [];
+        const teamNames = rosterIds.map(id => (rosterMap[id] || {}).teamName || "Unknown");
+
+        const adds = t.adds ? Object.keys(t.adds) : [];
+        const drops = t.drops ? Object.keys(t.drops) : [];
+
+        const addNames = adds.map(pid => playerMap[pid] || pid);
+        const dropNames = drops.map(pid => playerMap[pid] || pid);
+
+        let detail = "";
+        if (t.type === "trade") {
+          detail = `Trade between ${teamNames.join(" & ")}`;
+        } else {
+          const parts = [];
+          if (addNames.length) parts.push(`Added: ${addNames.join(", ")}`);
+          if (dropNames.length) parts.push(`Dropped: ${dropNames.join(", ")}`);
+          detail = parts.join(" · ") || "Roster move";
+        }
+
+        const card = document.createElement("div");
+        card.className = "txn-card";
+        card.innerHTML = `
+          <div class="txn-body">
+            <span class="txn-type ${t.type}">${txnTypeLabel(t.type)}</span>
+            <div class="txn-team" style="margin-top:6px;">${teamNames.join(", ") || "League"}</div>
+            <div class="txn-detail">${detail}</div>
+          </div>
+          <div class="txn-date">${fmtDate(t.created)}</div>
+        `;
+        list.appendChild(card);
+      });
+
+      const tickerEl = document.getElementById("ticker");
+      const tradeCount = txns.filter(t => t.type === "trade").length;
+      const waiverCount = txns.length - tradeCount;
+      const items = [
+        `${txns.length} MOVES IN THE LAST ${weeksToFetch.length} WEEKS`,
+        `${tradeCount} TRADES · ${waiverCount} WAIVER/FA MOVES`,
+        `${league.name ? league.name.toUpperCase() : "LEAGUE"} ACTIVITY FEED`,
+      ];
+      tickerEl.innerHTML = [...items, ...items].map(t => `<span>● ${t}</span>`).join("");
+
+      document.getElementById("status").style.display = "none";
+      document.getElementById("range-heading").textContent =
+        `LAST ${weeksToFetch.length} WEEKS · ${txns.length} MOVES`;
+    } catch (err) {
+      document.getElementById("status").textContent =
+        "Couldn't load activity data. Check that the league ID is correct and try again.";
+      console.error(err);
+    }
+  }
+
+  loadTransactions();
+</script>
+</body>
+</html>
