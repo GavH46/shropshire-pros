@@ -10,8 +10,12 @@ live data straight from Sleeper's public API in the browser.
 - **`matchups.html`** — Current week's matchups, updates automatically each week
 - **`transactions.html`** — Recent waiver, free agent, and trade activity (last 5 weeks)
 - **`draft.html`** — Full draft board with picks, players, and rounds
+- **`grades.html`** — Draft grades (A–F) and projected win/loss record per team,
+  based on where each player was picked vs. Sleeper's overall relevance ranking
+  (the closest free proxy to ADP available through their public API). This is a
+  fun, transparent estimate — not a real prediction — and the page says so.
 
-All four pages share a nav bar at the top so you can click between them, plus
+All five pages share a nav bar at the top so you can click between them, plus
 the same header, logo, and field-styled background.
 
 ## Already configured
@@ -56,9 +60,11 @@ player list to resolve names — see note below).
 
 Every page fetches fresh from Sleeper on load — nothing to regenerate weekly.
 Standings, matchups, and transactions update automatically. The one exception
-is player names: Sleeper's full player list is ~5MB, so the transactions and
-draft pages cache it in the browser's `localStorage` for 24 hours to avoid
-re-downloading it on every visit. It refreshes automatically once a day.
+is player names and rankings: Sleeper's full player list is ~5MB, so the
+transactions, draft, and grades pages cache it in the browser's `localStorage`
+for 24 hours to avoid re-downloading it on every visit. It refreshes
+automatically once a day — so if you check draft grades right after the
+draft, then again 25+ hours later, rankings will be freshly pulled each time.
 
 ## Useful Sleeper API references
 

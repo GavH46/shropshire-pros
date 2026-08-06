@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Draft Grades — League Dashboard</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+
+  <div class="ticker-wrap">
+    <div class="ticker" id="ticker">
+      <span>LOADING DRAFT GRADES…</span>
+    </div>
+  </div>
+
+  <div class="header">
+    <img class="logo" src="assets/spfl-logo.png" alt="League logo" />
+    <div class="header-text">
+      <div class="subtitle" id="week-label">LOADING…</div>
+      <h1 id="league-title" class="display">YOUR LEAGUE</h1>
+    </div>
+  </div>
+
+  <nav class="tabs">
+    <a href="index.html">STANDINGS</a>
+    <a href="matchups.html">MATCHUPS</a>
+    <a href="transactions.html">WAIVERS &amp; TRADES</a>
+    <a href="draft.html">DRAFT</a>
+    <a href="grades.html" class="active">DRAFT GRADES</a>
+  </nav>
+
+  <div class="methodology-note">
+    METHODOLOGY: Sleeper doesn't publish ADP directly, so grades are built from each
+    player's Sleeper "search_rank" (their overall relevance ranking) compared against
+    the pick number they were actually taken at. A player taken later than their rank
+    suggests = value; earlier = a reach. Grades and records reflect draft capital only —
+    they don't account for injuries, in-season performance, trades, or lineup decisions.
+    Treat this as a fun starting point, not a real prediction.
+  </div>
+
+  <div id="status" class="status">Fetching draft &amp; player ranking data (first load can take a few seconds)…</div>
+  <div class="grade-grid" id="grade-grid"></div>
+
+  <div class="footer-note">DATA VIA SLEEPER PUBLIC API · PLAYER RANKINGS CACHED LOCALLY FOR 24H</div>
+
+<script src="assets/common.js"></script>
+<script>
+  function letterGrade(z) {
+    if (z >= 1.25) return "A";
+    if (z >= 0.5) return "B";
+    if (z >= -0.5) return "C";
+    if (z >= -1.25) return "D";
+    return "F";
+  }
+
+  function mean(arr) { return arr.reduce((a, b) => a + b, 0) / arr.length; }
+  function stddev(arr, m) {
+    const v = mean(arr.map(x => (x - m) ** 2));
+    return Math.sqrt(v) || 1;
+  }
+
+  async function loadGrades() {
+    try {
+      const league = await getLeague();
+      setHeader(league);
+
+      const { rosterMap } = await getRostersAndUsers();
+
+      const drafts = await fetch(`${API}/league/${LEAGUE_ID}/drafts`).then(r => r.json());
+      if (!drafts || drafts.length === 0) {
+        document.getElementById("status").textContent = "No draft found for this league yet.";
+        return;
+      }
+      const draft = drafts[0];
+
+      const [picks, playerMeta] = await Promise.all([
+        fetch(`${API}/draft/${draft.draft_id}/picks`).then(r => r.json()),
+        getPlayerMeta(),
+      ]);
+
+      // Group picks by roster
+      const byRoster = {};
+      picks.forEach(p => {
+        if (!byRoster[p.roster_id]) byRoster[p.roster_id] = [];
+        const meta = playerMeta[p.player_id] || { name: "Unknown", pos: "", rank: 9999 };
+        byRoster[p.roster_id].push({
+          pickNo: p.pick_no,
+          round: p.round,
+          name: meta.name,
+          pos: meta.pos,
+          rank: meta.rank,
+          value: meta.rank - p.pick_no, // positive = value, negative = reach
+        });
+      });
+
+      // Team-level average value
+      const teamStats = Object.keys(byRoster).map(rosterId => {
+        const picksForTeam = byRoster[rosterId].sort((a, b) => a.pickNo - b.pickNo);
+        const avgValue = mean(picksForTeam.map(p => p.value));
+        const avgRank = mean(picksForTeam.map(p => p.rank));
+        const info = rosterMap[rosterId] || { teamName: "Unknown", owner: "Unknown" };
+        return { rosterId, teamName: info.teamName, owner: info.owner, picks: picksForTeam, avgValue, avgRank };
+      });
+
+      // Grade via z-score of avgValue across the league
+      const values = teamStats.map(t => t.avgValue);
+      const m = mean(values);
+      const sd = stddev(values, m);
+      teamStats.forEach(t => { t.z = (t.avgValue - m) / sd; t.grade = letterGrade(t.z); });
+
+      // Predicted record via z-score of team strength (inverse avg rank — lower rank = stronger)
+      const strengths = teamStats.map(t => -t.avgRank);
+      const sm = mean(strengths);
+      const ssd = stddev(strengths, sm);
+      const regularSeasonGames = (league.settings && league.settings.playoff_week_start)
+        ? Math.max(6, league.settings.playoff_week_start - 1)
+        : 14;
+
+      teamStats.forEach(t => {
+        const sz = (-t.avgRank - sm) / ssd;
+        let winPct = 0.5 + sz * 0.11;
+        winPct = Math.min(0.82, Math.max(0.18, winPct));
+        const wins = Math.round(winPct * regularSeasonGames);
+        t.predWins = wins;
+        t.predLosses = regularSeasonGames - wins;
+      });
+
+      // Sort best grade first
+      teamStats.sort((a, b) => b.z - a.z);
+
+      const grid = document.getElementById("grade-grid");
+      grid.innerHTML = "";
+
+      teamStats.forEach(t => {
+        const bestPicks = t.picks.slice().sort((a, b) => b.value - a.value).slice(0, 2);
+        const worstPicks = t.picks.slice().sort((a, b) => a.value - b.value).slice(0, 2);
+
+        const pickLines = [
+          ...bestPicks.map(p => ({ ...p, tag: "val-good", prefix: "▲ Value" })),
+          ...worstPicks.map(p => ({ ...p, tag: "val-bad", prefix: "▼ Reach" })),
+        ];
+
+        const card = document.createElement("div");
+        card.className = "grade-card";
+        card.innerHTML = `
+          <div class="grade-card-top">
+            <div class="grade-letter grade-${t.grade}">${t.grade}</div>
+            <div class="grade-record">
+              <div class="rec-num mono">${t.predWins}-${t.predLosses}</div>
+              <div class="rec-label">PROJECTED</div>
+            </div>
+          </div>
+          <div class="grade-team-name">${t.teamName}</div>
+          <div class="grade-owner">${t.owner} · ${t.picks.length} picks</div>
+          <div class="grade-picks">
+            ${pickLines.map(p => `
+              <div class="grade-pick-line">
+                <span class="${p.tag}">${p.prefix}: ${p.name} (${p.pos})</span>
+                <span class="mono">Rd ${p.round}, Pk ${p.pickNo}</span>
+              </div>
+            `).join("")}
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+
+      const best = teamStats[0];
+      const worst = teamStats[teamStats.length - 1];
+      const tickerEl = document.getElementById("ticker");
+      const items = [
+        `BEST DRAFT GRADE: ${best.teamName.toUpperCase()} (${best.grade})`,
+        `PROJECTED TOP RECORD: ${teamStats.slice().sort((a,b)=>b.predWins-a.predWins)[0].teamName.toUpperCase()}`,
+        `TOUGHEST GRADE: ${worst.teamName.toUpperCase()} (${worst.grade})`,
+      ];
+      tickerEl.innerHTML = [...items, ...items].map(t => `<span>● ${t}</span>`).join("");
+
+      document.getElementById("status").style.display = "none";
+    } catch (err) {
+      document.getElementById("status").textContent =
+        "Couldn't load draft grade data. Check that the league ID is correct and try again.";
+      console.error(err);
+    }
+  }
+
+  loadGrades();
+</script>
+</body>
+</html>
