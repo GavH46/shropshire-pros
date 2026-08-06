@@ -31,12 +31,14 @@
   </nav>
 
   <div class="methodology-note">
-    METHODOLOGY: Sleeper doesn't publish ADP directly, so grades are built from each
-    player's Sleeper "search_rank" (their overall relevance ranking) compared against
-    the pick number they were actually taken at. A player taken later than their rank
-    suggests = value; earlier = a reach. Grades and records reflect draft capital only —
-    they don't account for injuries, in-season performance, trades, or lineup decisions.
-    Treat this as a fun starting point, not a real prediction.
+    METHODOLOGY: Grades are primarily based on real Average Draft Position (ADP)
+    data from Fantasy Football Calculator, compared against the pick number each
+    player was actually taken at — later than ADP suggests = value, earlier = a
+    reach. For any player not found in that dataset, Sleeper's own overall
+    relevance ranking is used as a fallback. Grades and records reflect draft
+    capital only — they don't account for injuries, in-season performance,
+    trades, or lineup decisions. Treat this as a fun starting point, not a real
+    prediction.
   </div>
 
   <div id="status" class="status">Fetching draft &amp; player ranking data (first load can take a few seconds)…</div>
@@ -79,18 +81,47 @@
         getPlayerMeta(),
       ]);
 
+      // Determine scoring format + league size to query the right ADP dataset
+      const recPts = (league.scoring_settings && league.scoring_settings.rec) || 0;
+      const scoringFormat = recPts >= 1 ? "ppr" : recPts >= 0.5 ? "half-ppr" : "standard";
+      const teamCount = league.total_rosters || new Set(picks.map(p => p.roster_id)).size || 10;
+
+      let adpMap = {};
+      let adpAvailable = true;
+      try {
+        adpMap = await getADPMap(draft.season || league.season, teamCount, scoringFormat);
+      } catch (e) {
+        adpAvailable = false;
+        console.warn("ADP fetch failed, falling back to Sleeper rankings only:", e);
+      }
+
+      let adpMatches = 0, adpMisses = 0;
+
       // Group picks by roster
       const byRoster = {};
       picks.forEach(p => {
         if (!byRoster[p.roster_id]) byRoster[p.roster_id] = [];
         const meta = playerMeta[p.player_id] || { name: "Unknown", pos: "", rank: 9999 };
+        const adpEntry = adpMap[normalizeName(meta.name)];
+        let expectedRank;
+        let source;
+        if (adpEntry && typeof adpEntry.adp === "number") {
+          expectedRank = adpEntry.adp;
+          source = "adp";
+          adpMatches++;
+        } else {
+          expectedRank = meta.rank;
+          source = "sleeper";
+          adpMisses++;
+        }
         byRoster[p.roster_id].push({
           pickNo: p.pick_no,
           round: p.round,
           name: meta.name,
           pos: meta.pos,
-          rank: meta.rank,
-          value: meta.rank - p.pick_no, // positive = value, negative = reach
+          rank: expectedRank,
+          source,
+          value: expectedRank - p.pick_no, // positive = value, negative = reach
         });
       });
 
@@ -172,6 +203,9 @@
         `BEST DRAFT GRADE: ${best.teamName.toUpperCase()} (${best.grade})`,
         `PROJECTED TOP RECORD: ${teamStats.slice().sort((a,b)=>b.predWins-a.predWins)[0].teamName.toUpperCase()}`,
         `TOUGHEST GRADE: ${worst.teamName.toUpperCase()} (${worst.grade})`,
+        adpAvailable
+          ? `GRADED USING REAL ADP · ${adpMatches} MATCHED / ${adpMisses} FALLBACK`
+          : `ADP UNAVAILABLE THIS LOAD · USING SLEEPER RANKINGS ONLY`,
       ];
       tickerEl.innerHTML = [...items, ...items].map(t => `<span>● ${t}</span>`).join("");
 
