@@ -11,11 +11,11 @@ live data straight from Sleeper's public API in the browser.
 - **`transactions.html`** — Recent waiver, free agent, and trade activity (last 5 weeks)
 - **`draft.html`** — Full draft board with picks, players, and rounds
 - **`grades.html`** — Draft grades (A–F) and projected win/loss record per team.
-  Uses real Average Draft Position (ADP) data from Fantasy Football Calculator's
-  free public API as the primary source, comparing it against where each player
-  was actually picked. For any player not found there, it falls back to
-  Sleeper's own overall relevance ranking. This is a fun, transparent estimate —
-  not a real prediction — and the page says so.
+  Uses real Average Draft Position (ADP) data — FantasyPros if you set it up
+  (see below), otherwise Fantasy Football Calculator's free API automatically
+  — comparing it against where each player was actually picked. Falls back to
+  Sleeper's own ranking for anything unmatched. This is a fun, transparent
+  estimate — not a real prediction — and the page says so.
 
 All five pages share a nav bar at the top so you can click between them, plus
 the same header, logo, and field-styled background.
@@ -70,23 +70,50 @@ a day.
 
 ## About the ADP data
 
-Draft grades pull real Average Draft Position data from Fantasy Football
-Calculator's free, keyless REST API (`fantasyfootballcalculator.com/api/v1/adp`),
-matched to your draft by player name. A few things worth knowing:
+Draft grades try two real ADP sources, in order, before falling back to
+Sleeper's internal ranking:
 
-- It's free for personal and commercial use, no signup required — good fit for
-  a static site like this one, since there's no API key to accidentally expose
-  in the page source.
-- Matching is done by normalizing player names (handling things like "Jr."/"II"
-  suffixes and punctuation), so a small number of players — especially rookies
-  or very deep bench picks — may not match and will fall back to Sleeper's
-  internal ranking instead. The grades page's ticker reports how many picks
-  were matched vs. fell back each time it loads.
-- FantasyPros also has an official API with ADP data, but it requires a
-  personal API key tied to an account, which isn't safe to embed in a public
-  static site (anyone viewing the page source could see and use it). If you'd
-  rather use FantasyPros specifically, that would need a small backend/proxy
-  to keep the key private — a bigger lift than this project currently needs.
+1. **FantasyPros**, via a Netlify Function proxy included in this project
+   (`netlify/functions/adp.js`). This keeps your FantasyPros API key private —
+   it lives only in Netlify's environment variables, never in any file here.
+   **Only works once deployed to Netlify with the key configured** — see
+   setup below.
+2. **Fantasy Football Calculator**, a free/keyless API, used automatically
+   if FantasyPros isn't set up or is unreachable. No configuration needed —
+   this is what you'll get out of the box.
+
+Either way, any player that doesn't match by name falls back to Sleeper's
+own ranking, and the grades page reports which source was actually used and
+how many picks matched each time it loads.
+
+### Setting up FantasyPros (optional)
+
+This step is optional — the dashboard works fine without it, using Fantasy
+Football Calculator instead. Only do this if you specifically want
+FantasyPros' rankings.
+
+1. Deploy this project to **Netlify** specifically (the proxy function is
+   Netlify-specific; Vercel or GitHub Pages won't run it as-is).
+2. Get a free FantasyPros API key at
+   https://www.fantasypros.com/api-data/ — free access covers personal,
+   non-commercial use like this.
+3. In your Netlify site's dashboard, go to **Site configuration → Environment
+   variables** and add:
+   - Key: `FANTASYPROS_API_KEY`
+   - Value: your API key
+4. Redeploy (Netlify → Deploys → Trigger deploy). The grades page will now
+   use FantasyPros automatically — no code changes needed.
+
+**Never paste your FantasyPros API key into any `.html` or `.js` file in this
+project.** Anyone who views the page source of a deployed site can read
+those files, and a key embedded there would be exposed to the world. The
+environment variable approach above is the only safe way to use it here.
+
+If you'd rather use FantasyPros on Vercel or another host instead of
+Netlify, the same idea applies — you'd need that platform's equivalent of a
+serverless function (Vercel Functions, Cloudflare Workers, etc.) with the
+key set as a private environment variable there, and `common.js` would need
+its FantasyPros URL updated to match. Ask if you want that built out.
 
 ## Useful Sleeper API references
 
