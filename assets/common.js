@@ -124,10 +124,15 @@ async function getPlayerMeta() {
   return slim;
 }
 
-// ---------- ADP data (Fantasy Football Calculator, free, no key required) ----------
-// Used as the primary source for draft grading, since ADP is measured in the
-// same units as draft pick number. Falls back to Sleeper's search_rank (see
-// getPlayerMeta) for any player that can't be matched by name.
+// ---------- ADP data ----------
+// Two sources, tried in order:
+//   1. FantasyPros, via our own Netlify Function proxy (keeps the API key
+//      private). Only works once deployed to Netlify — silently skipped
+//      when running locally or on other hosts.
+//   2. Fantasy Football Calculator's free, keyless API — same units
+//      (average pick number), no setup required.
+// Falls back to Sleeper's search_rank (see getPlayerMeta) for any player
+// neither source has.
 const ADP_CACHE_KEY = "spfl_adp_cache_v1";
 const ADP_CACHE_TTL = 1000 * 60 * 60 * 24; // 24 hours
 
@@ -141,8 +146,7 @@ function normalizeName(name) {
     .trim();
 }
 
-async function getADPMap(season, teams, scoringFormat) {
-  const cacheKey = `${ADP_CACHE_KEY}_${season}_${teams}_${scoringFormat}`;
+async function cachedFetch(cacheKey, fetchFn) {
   try {
     const cached = localStorage.getItem(cacheKey);
     if (cached) {
@@ -153,25 +157,81 @@ async function getADPMap(season, teams, scoringFormat) {
     // ignore corrupted cache, refetch below
   }
 
-  const url = `https://fantasyfootballcalculator.com/api/v1/adp/${scoringFormat}?teams=${teams}&year=${season}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`ADP fetch failed: ${res.status}`);
-  const json = await res.json();
-  const players = json.players || [];
-
-  const map = {};
-  players.forEach(p => {
-    const key = normalizeName(p.name);
-    if (key) map[key] = { adp: p.adp, name: p.name, position: p.position };
-  });
+  const data = await fetchFn();
 
   try {
-    localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data: map }));
+    localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data }));
   } catch {
     // storage full or unavailable — fine, just won't cache
   }
 
-  return map;
+  return data;
+}
+
+async function getFantasyProsADP(season, scoringFormat) {
+  // scoringFormat here is "ppr" | "half-ppr" | "standard" (our internal
+  // naming) — map to what the proxy/FantasyPros expects.
+  const scoringMap = { ppr: "PPR", "half-ppr": "HALF", standard: "STD" };
+  const scoring = scoringMap[scoringFormat] || "PPR";
+  const cacheKey = `${ADP_CACHE_KEY}_fp_${season}_${scoring}`;
+
+  return cachedFetch(cacheKey, async () => {
+    const res = await fetch(`/.netlify/functions/adp?season=${season}&scoring=${scoring}&position=ALL`);
+    if (!res.ok) throw new Error(`FantasyPros proxy returned ${res.status}`);
+    const json = await res.json();
+    const players = json.players || [];
+
+    const map = {};
+    players.forEach(p => {
+      const key = normalizeName(p.player_name || p.name);
+      // consensus-rankings responses expose average draft slot as rank_ave
+      // when type=ADP; fall back to rank_ecr if that's ever absent.
+      const adpVal = p.rank_ave ?? p.rank_ecr;
+      if (key && typeof adpVal !== "undefined") {
+        map[key] = { adp: parseFloat(adpVal), name: p.player_name || p.name, position: p.player_position_id };
+      }
+    });
+    return map;
+  });
+}
+
+async function getFFCADP(season, teams, scoringFormat) {
+  const cacheKey = `${ADP_CACHE_KEY}_ffc_${season}_${teams}_${scoringFormat}`;
+
+  return cachedFetch(cacheKey, async () => {
+    const url = `https://fantasyfootballcalculator.com/api/v1/adp/${scoringFormat}?teams=${teams}&year=${season}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`ADP fetch failed: ${res.status}`);
+    const json = await res.json();
+    const players = json.players || [];
+
+    const map = {};
+    players.forEach(p => {
+      const key = normalizeName(p.name);
+      if (key) map[key] = { adp: p.adp, name: p.name, position: p.position };
+    });
+    return map;
+  });
+}
+
+// Combined lookup: try FantasyPros (via proxy) first, then FFC. Returns
+// { map, source } where source is "fantasypros", "ffc", or "none".
+async function getADPMap(season, teams, scoringFormat) {
+  try {
+    const map = await getFantasyProsADP(season, scoringFormat);
+    if (Object.keys(map).length > 0) return { map, source: "fantasypros" };
+  } catch {
+    // proxy not deployed, key missing, or FantasyPros unreachable — fall through
+  }
+
+  try {
+    const map = await getFFCADP(season, teams, scoringFormat);
+    if (Object.keys(map).length > 0) return { map, source: "ffc" };
+  } catch {
+    // FFC unreachable either — caller falls back to Sleeper ranks entirely
+  }
+
+  return { map: {}, source: "none" };
 }
 
 function setHeader(league) {
