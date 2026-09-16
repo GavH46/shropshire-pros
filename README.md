@@ -16,9 +16,43 @@ live data straight from Sleeper's public API in the browser.
   — comparing it against where each player was actually picked. Falls back to
   Sleeper's own ranking for anything unmatched. This is a fun, transparent
   estimate — not a real prediction — and the page says so.
+- **`reports.html`** — Weekly written recaps (matchup reviews, trash talk,
+  awards) with a tab per week. Unlike the other pages, this one isn't live
+  Sleeper data — it's hand-written content you (or Claude) put together each
+  week and add to the archive. See "Adding a weekly report" below.
 
-All five pages share a nav bar at the top so you can click between them, plus
+All six pages share a nav bar at the top so you can click between them, plus
 the same header, logo, and field-styled background.
+
+## Adding a weekly report
+
+`reports.html` reads from `assets/reports-data.js` — a plain JavaScript file
+containing an array of report objects. To add a new week:
+
+1. Open `assets/reports-data.js`
+2. Copy this shape and add it to the **top** of the `REPORTS` array (newest
+   first, so it shows by default):
+
+   ```js
+   {
+     week: 2,
+     title: "Week 2: ...",
+     subtitle: "Trash talk edition",
+     markdown: `
+   # Your report content here
+
+   Standard markdown works — **bold**, ## headers, - bullet lists, --- rules,
+   etc. Just paste in whatever Claude (or you) wrote, inside the backticks.
+   `
+   },
+   ```
+
+3. Save and redeploy (or just re-upload the one file if using Netlify's
+   drag-and-drop — you don't need to touch `reports.html` itself).
+
+The page automatically builds a tab for every entry in the array and renders
+the markdown using [marked.js](https://marked.js.org/), loaded from cdnjs —
+no build step, no server-side rendering needed.
 
 ## Already configured
 

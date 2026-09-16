@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Weekly Report — League Dashboard</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+
+  <div class="ticker-wrap">
+    <div class="ticker" id="ticker">
+      <span>LOADING WEEKLY REPORT…</span>
+    </div>
+  </div>
+
+  <div class="header">
+    <img class="logo" src="assets/spfl-logo.png" alt="League logo" />
+    <div class="header-text">
+      <div class="subtitle" id="week-label">LOADING…</div>
+      <h1 id="league-title" class="display">YOUR LEAGUE</h1>
+    </div>
+  </div>
+
+  <nav class="tabs">
+    <a href="index.html">STANDINGS</a>
+    <a href="matchups.html">MATCHUPS</a>
+    <a href="transactions.html">WAIVERS &amp; TRADES</a>
+    <a href="draft.html">DRAFT</a>
+    <a href="grades.html">DRAFT GRADES</a>
+    <a href="reports.html" class="active">WEEKLY REPORT</a>
+  </nav>
+
+  <div class="report-tabs" id="report-tabs"></div>
+  <div class="report-meta" id="report-meta"></div>
+  <div class="report-body" id="report-body">Loading…</div>
+
+  <div class="footer-note">WEEKLY RECAPS ARE WRITTEN CONTENT, NOT LIVE SLEEPER DATA — SEE README FOR HOW TO ADD A NEW WEEK</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="assets/common.js"></script>
+<script src="assets/reports-data.js"></script>
+<script>
+  let currentWeek = null;
+
+  function renderReport(week) {
+    const report = REPORTS.find(r => r.week === week) || REPORTS[0];
+    currentWeek = report.week;
+
+    if (typeof marked === "undefined") {
+      // CDN didn't load — fall back to plain text rather than a blank page.
+      const pre = document.createElement("pre");
+      pre.style.whiteSpace = "pre-wrap";
+      pre.style.fontFamily = "inherit";
+      pre.textContent = report.markdown;
+      const body = document.getElementById("report-body");
+      body.innerHTML = "";
+      body.appendChild(pre);
+    } else {
+      document.getElementById("report-body").innerHTML = marked.parse(report.markdown);
+    }
+
+    document.getElementById("report-meta").textContent =
+      `${report.subtitle ? report.subtitle.toUpperCase() + " · " : ""}WEEK ${report.week}`;
+
+    document.querySelectorAll("#report-tabs button").forEach(btn => {
+      btn.classList.toggle("active", Number(btn.dataset.week) === report.week);
+    });
+
+    const tickerEl = document.getElementById("ticker");
+    const items = [
+      report.title.toUpperCase(),
+      `${REPORTS.length} REPORT${REPORTS.length === 1 ? "" : "S"} PUBLISHED`,
+      "NEW REPORT DROPS EVERY WEEK",
+    ];
+    tickerEl.innerHTML = [...items, ...items].map(t => `<span>● ${t}</span>`).join("");
+  }
+
+  function buildTabs() {
+    const tabWrap = document.getElementById("report-tabs");
+    tabWrap.innerHTML = "";
+    REPORTS.forEach(r => {
+      const btn = document.createElement("button");
+      btn.textContent = `WEEK ${r.week}`;
+      btn.dataset.week = r.week;
+      btn.addEventListener("click", () => renderReport(r.week));
+      tabWrap.appendChild(btn);
+    });
+  }
+
+  async function init() {
+    try {
+      const league = await getLeague();
+      setHeader(league);
+    } catch (e) {
+      // Report page works fine even if the Sleeper league fetch fails —
+      // header just falls back to defaults.
+      console.warn("Could not load league header info:", e);
+    }
+
+    if (typeof REPORTS === "undefined" || REPORTS.length === 0) {
+      document.getElementById("report-body").innerHTML =
+        "<p>No weekly reports yet — add one to assets/reports-data.js.</p>";
+      return;
+    }
+
+    buildTabs();
+    renderReport(REPORTS[0].week);
+  }
+
+  init();
+</script>
+</body>
+</html>
