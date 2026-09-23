@@ -44,7 +44,7 @@ Boff, last week you started a shutout Kyle Pitts over a 19.70-point Dallas Goede
 
 Gav — Jaxon Smith-Njigba was your best player again (33.50, Player of the Week honors two weeks running), but Justin Jefferson came back to earth hard after his 21-point explosion last week, managing only 5.50 this time. That's the gap between winning and being this week's Underachiever award — again.
 
-Matty, with A.J. Brown dealing with whatever landed him on IR, you plugged in Jalen Coker and Dak Prescott quietly went off for 29.76 to cover the difference. And once again, your bench is embarrassingly loaded — Tyler Shough dropped 22.38 points you didn't need, on top of Jarquez Coleman putting up 11.80 unused too. You're not just winning, you're winning with a taxi squad better than half the league's starting lineups.
+Matty, with A.J. Brown dealing with his ankle injury landed him on IR, you plugged in Jalen Coker and Dak Prescott quietly went off for 29.76 to cover the difference. And once again, your bench is embarrassingly loaded — Tyler Shough dropped 22.38 points you didn't need, on top of Jarquez Coleman putting up 11.80 unused too. You're not just winning, you're winning with a taxi squad better than half the league's starting lineups.
 
 **Damage report:** Gav's floor without a Jefferson explosion is worryingly low. Matty could bench his whole team and still probably compete.
 
